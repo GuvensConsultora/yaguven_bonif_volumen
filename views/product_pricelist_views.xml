@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="product_pricelist_view_volume_discount" model="ir.ui.view">
+        <field name="name">product.pricelist.form.volume.discount</field>
+        <field name="model">product.pricelist</field>
+        <field name="inherit_id" ref="product.product_pricelist_view"/>
+        <field name="arch" type="xml">
+            <page name="pricelist_rules" position="after">
+                <page string="Bonificación por volumen" name="volume_discount"
+                      groups="account.group_account_manager">
+                    <group>
+                        <field name="vd_enabled"/>
+                    </group>
+                    <p class="text-muted" invisible="not vd_enabled">
+                        Cada tramo indica desde qué monto facturado en el mes calendario rige el
+                        porcentaje. El porcentaje es el total del tramo: al pasar de un tramo al
+                        siguiente se bonifica sólo la diferencia.
+                    </p>
+                    <field name="vd_tier_ids" nolabel="1" invisible="not vd_enabled"
+                           context="{'default_pricelist_id': id, 'default_partner_id': False}">
+                        <list editable="bottom">
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id" column_invisible="1"/>
+                            <field name="amount_from"/>
+                            <field name="percent"/>
+                        </list>
+                    </field>
+                </page>
+            </page>
+        </field>
+    </record>
+</odoo>

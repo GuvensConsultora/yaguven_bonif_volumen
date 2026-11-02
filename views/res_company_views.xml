@@ -13,15 +13,6 @@
                         <field name="vd_base"/>
                         <field name="vd_only_paid"/>
                     </group>
-                    <separator string="Escala general"/>
-                    <field name="vd_tier_ids" nolabel="1"
-                           context="{'default_company_id': id, 'default_partner_id': False}">
-                        <list editable="bottom">
-                            <field name="currency_id" column_invisible="1"/>
-                            <field name="amount_from"/>
-                            <field name="percent"/>
-                        </list>
-                    </field>
                 </page>
             </xpath>
         </field>

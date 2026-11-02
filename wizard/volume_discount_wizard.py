@@ -43,8 +43,9 @@ class VolumeDiscountWizard(models.TransientModel):
         fmt = lambda amount: currency.format(amount)  # noqa: E731
         date_from, _ = move._vd_period()
         pending = {p["move"].id: p["percent"] for p in data["pending"]}
-        scope = data["scale"][:1].partner_id and self.env._("escala particular del cliente") \
-            or self.env._("escala general de la empresa")
+        first = data["scale"][:1]
+        scope = first.partner_id and self.env._("escala particular del cliente") \
+            or self.env._("escala de la lista %s", first.pricelist_id.name)
         scale_text = "\n".join(
             self.env._("Desde %(amount)s → %(pct)s%%", amount=fmt(t.amount_from), pct=f"{t.percent:g}")
             for t in data["scale"]

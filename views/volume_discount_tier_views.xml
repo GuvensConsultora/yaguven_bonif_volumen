@@ -6,7 +6,8 @@
         <field name="arch" type="xml">
             <list editable="bottom">
                 <field name="company_id" groups="base.group_multi_company"/>
-                <field name="partner_id" placeholder="Escala general"/>
+                <field name="pricelist_id"/>
+                <field name="partner_id"/>
                 <field name="currency_id" column_invisible="1"/>
                 <field name="amount_from"/>
                 <field name="percent"/>
@@ -19,11 +20,13 @@
         <field name="model">yaguven.volume.discount.tier</field>
         <field name="arch" type="xml">
             <search>
+                <field name="pricelist_id"/>
                 <field name="partner_id"/>
-                <filter name="general" string="Escala general" domain="[('partner_id', '=', False)]"/>
+                <filter name="by_pricelist" string="Escalas por lista" domain="[('pricelist_id', '!=', False)]"/>
                 <filter name="particular" string="Escalas por cliente" domain="[('partner_id', '!=', False)]"/>
                 <group>
                     <filter name="group_company" string="Empresa" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_pricelist" string="Lista de precios" context="{'group_by': 'pricelist_id'}"/>
                     <filter name="group_partner" string="Cliente" context="{'group_by': 'partner_id'}"/>
                 </group>
             </search>
@@ -34,12 +37,12 @@
         <field name="name">Bonificación por volumen</field>
         <field name="res_model">yaguven.volume.discount.tier</field>
         <field name="view_mode">list</field>
-        <field name="context">{'search_default_group_partner': 1}</field>
+        <field name="context">{'search_default_group_pricelist': 1}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">Cargá los tramos de bonificación por volumen</p>
             <p>Cada tramo indica desde qué monto facturado en el mes rige un porcentaje.
-               Sin cliente es la escala general de la empresa; con cliente, la escala particular
-               de ese cliente, que reemplaza a la general.</p>
+               Con lista de precios es la escala de esa lista (se activa en la ficha de la lista);
+               con cliente, la escala particular de ese cliente, que reemplaza a la de su lista.</p>
         </field>
     </record>
 

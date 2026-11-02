@@ -7,6 +7,6 @@ class ResPartner(models.Model):
     vd_tier_ids = fields.One2many(
         "yaguven.volume.discount.tier", "partner_id",
         string="Escala particular de bonificación",
-        help="Si el cliente tiene escala propia en una empresa, reemplaza a la escala general "
-             "de esa empresa.",
+        help="Si el cliente tiene escala propia en una empresa, reemplaza a la escala de la "
+             "lista de precios que tiene asignada.",
     )

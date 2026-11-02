@@ -4,11 +4,6 @@ from odoo import fields, models
 class ResCompany(models.Model):
     _inherit = "res.company"
 
-    vd_tier_ids = fields.One2many(
-        "yaguven.volume.discount.tier", "company_id",
-        string="Escala general de bonificación",
-        domain=[("partner_id", "=", False)],
-    )
     vd_product_id = fields.Many2one(
         "product.product", string="Producto de bonificación",
         domain="[('type', '=', 'service')]",

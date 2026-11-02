@@ -10,10 +10,11 @@
                       invisible="parent_id" groups="account.group_account_invoice">
                     <p class="text-muted">
                         Escala particular del cliente. Si tiene tramos cargados en una empresa,
-                        reemplaza a la escala general de esa empresa. Sin tramos, rige la general.
+                        reemplaza a la escala de la lista de precios que tiene asignada. Sin tramos,
+                        rige la de su lista (si la lista tiene activada la bonificación).
                     </p>
                     <field name="vd_tier_ids" nolabel="1"
-                           context="{'default_partner_id': id}">
+                           context="{'default_partner_id': id, 'default_pricelist_id': False}">
                         <list editable="bottom">
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="currency_id" column_invisible="1"/>
