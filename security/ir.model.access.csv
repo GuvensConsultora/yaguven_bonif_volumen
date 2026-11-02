@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_vd_tier_invoice,vd.tier.invoice,model_yaguven_volume_discount_tier,account.group_account_invoice,1,0,0,0
+access_vd_tier_manager,vd.tier.manager,model_yaguven_volume_discount_tier,account.group_account_manager,1,1,1,1
+access_vd_wizard,vd.wizard,model_yaguven_volume_discount_wizard,account.group_account_invoice,1,1,1,1
+access_vd_wizard_line,vd.wizard.line,model_yaguven_volume_discount_wizard_line,account.group_account_invoice,1,1,1,1

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="volume_discount_tier_list" model="ir.ui.view">
+        <field name="name">yaguven.volume.discount.tier.list</field>
+        <field name="model">yaguven.volume.discount.tier</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="partner_id" placeholder="Escala general"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="amount_from"/>
+                <field name="percent"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="volume_discount_tier_search" model="ir.ui.view">
+        <field name="name">yaguven.volume.discount.tier.search</field>
+        <field name="model">yaguven.volume.discount.tier</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="partner_id"/>
+                <filter name="general" string="Escala general" domain="[('partner_id', '=', False)]"/>
+                <filter name="particular" string="Escalas por cliente" domain="[('partner_id', '!=', False)]"/>
+                <group>
+                    <filter name="group_company" string="Empresa" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_partner" string="Cliente" context="{'group_by': 'partner_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_volume_discount_tier" model="ir.actions.act_window">
+        <field name="name">Bonificación por volumen</field>
+        <field name="res_model">yaguven.volume.discount.tier</field>
+        <field name="view_mode">list</field>
+        <field name="context">{'search_default_group_partner': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Cargá los tramos de bonificación por volumen</p>
+            <p>Cada tramo indica desde qué monto facturado en el mes rige un porcentaje.
+               Sin cliente es la escala general de la empresa; con cliente, la escala particular
+               de ese cliente, que reemplaza a la general.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_volume_discount_tier"
+              name="Bonificación por volumen"
+              parent="account.account_invoicing_menu"
+              action="action_volume_discount_tier"
+              groups="account.group_account_manager"
+              sequence="90"/>
+</odoo>

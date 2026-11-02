@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_company_form_volume_discount" model="ir.ui.view">
+        <field name="name">res.company.form.volume.discount</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Bonificación por volumen" name="volume_discount"
+                      groups="account.group_account_manager">
+                    <group>
+                        <field name="vd_product_id"/>
+                        <field name="vd_base"/>
+                        <field name="vd_only_paid"/>
+                    </group>
+                    <separator string="Escala general"/>
+                    <field name="vd_tier_ids" nolabel="1"
+                           context="{'default_company_id': id, 'default_partner_id': False}">
+                        <list editable="bottom">
+                            <field name="currency_id" column_invisible="1"/>
+                            <field name="amount_from"/>
+                            <field name="percent"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

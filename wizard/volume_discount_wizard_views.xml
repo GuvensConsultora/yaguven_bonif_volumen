@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="volume_discount_wizard_form" model="ir.ui.view">
+        <field name="name">yaguven.volume.discount.wizard.form</field>
+        <field name="model">yaguven.volume.discount.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Bonificación por volumen">
+                <field name="move_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <div class="alert alert-info" role="alert">
+                    <field name="explanation" nolabel="1"/>
+                </div>
+                <group>
+                    <group string="Acumulado">
+                        <field name="partner_id"/>
+                        <field name="period"/>
+                        <field name="base"/>
+                        <field name="accumulated_before"/>
+                        <field name="own_volume"/>
+                        <field name="total"/>
+                    </group>
+                    <group string="Escala">
+                        <field name="scale_text" nolabel="1" colspan="2"/>
+                        <field name="previous_percent"/>
+                        <field name="percent"/>
+                    </group>
+                </group>
+                <field name="line_ids" nolabel="1">
+                    <list decoration-bf="is_current" decoration-muted="not counts">
+                        <field name="currency_id" column_invisible="1"/>
+                        <field name="invoice_date"/>
+                        <field name="move_id"/>
+                        <field name="move_type"/>
+                        <field name="payment_state"/>
+                        <field name="volume" sum="Total"/>
+                        <field name="applied_percent"/>
+                        <field name="pending_percent"/>
+                        <field name="is_current" column_invisible="1"/>
+                        <field name="counts" column_invisible="1"/>
+                        <field name="note"/>
+                    </list>
+                </field>
+                <footer>
+                    <button name="action_apply" type="object" class="btn-primary"
+                            string="Aplicar bonificación y confirmar" data-hotkey="q"/>
+                    <button name="action_post_without_discount" type="object" class="btn-secondary"
+                            string="Confirmar sin bonificación" data-hotkey="w"
+                            confirm="La factura se confirma sin bonificación y queda registrado en el historial. ¿Continuar?"/>
+                    <button string="Cancelar" special="cancel" data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
