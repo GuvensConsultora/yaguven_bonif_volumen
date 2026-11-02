@@ -11,6 +11,7 @@
                     <group>
                         <field name="vd_product_id"/>
                         <field name="vd_base"/>
+                        <field name="vd_excluded_product_ids" widget="many2many_tags"/>
                         <field name="vd_only_paid"/>
                     </group>
                 </page>

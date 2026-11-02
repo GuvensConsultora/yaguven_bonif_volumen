@@ -30,11 +30,25 @@ class AccountMove(models.Model):
     # ------------------------------------------------------------------ cálculo
 
     def _vd_product_lines(self):
-        """Líneas de mercadería/servicio que forman la base: excluye las de bonificación."""
+        """Líneas que forman la base: excluye las de bonificación y los productos que la
+        empresa marcó como "no suman" (flete y similares)."""
         self.ensure_one()
+        excluded = self.company_id.vd_excluded_product_ids
         return self.invoice_line_ids.filtered(
             lambda l: l.display_type == "product" and not l.vd_source_move_id
+            and l.product_id not in excluded
         )
+
+    @staticmethod
+    def _vd_gross_factor(line):
+        """Factor que lleva el subtotal de la línea a su importe bruto (cantidad x precio,
+        antes del descuento de la línea). Con descuento del 100% el subtotal es 0 y no hay
+        factor que lo recupere: esa línea no suma."""
+        if not line.discount:
+            return 1.0
+        if line.discount >= 100:
+            return 0.0
+        return 100.0 / (100.0 - line.discount)
 
     def _vd_volume(self, base):
         """Aporte del comprobante al acumulado del mes, en moneda de la empresa.
@@ -44,7 +58,7 @@ class AccountMove(models.Model):
         self.ensure_one()
         total = 0.0
         for line in self._vd_product_lines():
-            amount = -line.balance
+            amount = -line.balance * self._vd_gross_factor(line)
             if base == "total" and line.price_subtotal:
                 amount *= line.price_total / line.price_subtotal
             total += amount
@@ -143,7 +157,8 @@ class AccountMove(models.Model):
         groups = defaultdict(float)
         for line in self._vd_product_lines():
             included = any(line.tax_ids.mapped("price_include"))
-            groups[line.tax_ids] += line.price_total if included else line.price_subtotal
+            amount = line.price_total if included else line.price_subtotal
+            groups[line.tax_ids] += amount * self._vd_gross_factor(line)
         vals = []
         for taxes, amount in groups.items():
             if not amount:

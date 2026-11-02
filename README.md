@@ -34,7 +34,8 @@ Ejemplo: 4% desde $5.000.000 y 5% desde $10.000.000.
 
 1. *Ajustes › Empresas › (empresa) › solapa Bonificación por volumen*:
    - **Producto de bonificación** (servicio): de él salen la cuenta contable y los impuestos de las líneas.
-   - **Monto que se compara**: neto sin impuestos o total con impuestos.
+   - **Monto que se compara**: importe bruto (cantidad × precio, antes de los descuentos de cada línea), sin o con impuestos. Sobre ese mismo importe se calcula el %.
+   - **Productos que no suman**: no cuentan para el acumulado ni reciben bonificación (por ejemplo, el flete).
    - **Contar sólo facturas cobradas**: las facturas anteriores suman y reciben la NC sólo si están cobradas.
    - **Escala general**: tramos «desde monto → %», sin límite de niveles.
 2. *Contacto › solapa Bonificación por volumen*: escala particular del cliente, que **reemplaza** a la general.

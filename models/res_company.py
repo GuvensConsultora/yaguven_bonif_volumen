@@ -11,9 +11,17 @@ class ResCompany(models.Model):
              "las líneas de la nota de crédito. De él salen la cuenta contable y los impuestos.",
     )
     vd_base = fields.Selection(
-        [("untaxed", "Neto sin impuestos"), ("total", "Total con impuestos")],
+        [("untaxed", "Importe bruto sin impuestos"), ("total", "Importe bruto con impuestos")],
         string="Monto que se compara contra la escala",
-        help="Si el tope de la escala se mide sobre el neto o sobre el total de las facturas.",
+        help="Importe bruto: cantidad por precio unitario, antes de los descuentos de cada "
+             "línea. Elegí si se mide sin o con impuestos. Sobre ese mismo importe se calcula "
+             "el % de bonificación.",
+    )
+    vd_excluded_product_ids = fields.Many2many(
+        "product.product", "yaguven_vd_company_excluded_product_rel", "company_id", "product_id",
+        string="Productos que no suman",
+        help="Productos que no cuentan para el acumulado del mes ni reciben bonificación, "
+             "por ejemplo el flete.",
     )
     vd_only_paid = fields.Boolean(
         string="Contar sólo facturas cobradas",

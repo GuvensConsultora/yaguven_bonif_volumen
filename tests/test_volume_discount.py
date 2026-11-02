@@ -207,3 +207,49 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         move = self._invoice(5, 1_000_000, post=False)
         with self.assertRaises(UserError):
             move.action_post()
+
+    # ------------------------------------------------------- base: importe bruto
+
+    def test_base_is_gross_before_line_discount(self):
+        """Importe bruto = cantidad x precio, antes del descuento de la línea (criterio de
+        BAIML, 02/11/2026). 10.000.000 con 30% de descuento suma 10.000.000, no 7.000.000."""
+        move = self.env["account.move"].create({
+            "move_type": "out_invoice", "partner_id": self.partner_a.id,
+            "invoice_date": "2026-11-05",
+            "invoice_line_ids": [fields.Command.create({
+                "product_id": self.product_a.id, "quantity": 1, "price_unit": 10_000_000,
+                "discount": 30, "tax_ids": [fields.Command.clear()],
+            })],
+        })
+        wizard = self._wizard(move)
+        self.assertEqual(wizard.percent, 4)
+        wizard.action_apply()
+        # El 4% se calcula sobre el bruto: 400.000, no 280.000.
+        self.assertAlmostEqual(self._bonus_lines(move).price_subtotal, -400_000)
+
+    def test_excluded_product_does_not_count(self):
+        """El flete no suma al acumulado ni recibe bonificación."""
+        freight = self.env["product.product"].create({
+            "name": "Flete y/o seguro", "type": "service", "taxes_id": [fields.Command.clear()],
+        })
+        self.company.vd_excluded_product_ids = freight
+        lines = [
+            fields.Command.create({"product_id": self.product_a.id, "quantity": 1,
+                                   "price_unit": 7_900_000, "tax_ids": [fields.Command.clear()]}),
+            fields.Command.create({"product_id": freight.id, "quantity": 1,
+                                   "price_unit": 500_000, "tax_ids": [fields.Command.clear()]}),
+        ]
+        move = self.env["account.move"].create({
+            "move_type": "out_invoice", "partner_id": self.partner_a.id,
+            "invoice_date": "2026-11-05", "invoice_line_ids": lines,
+        })
+        # 7.900.000 + 500.000 de flete pasaría los 8.000.000; sin el flete no llega.
+        move.action_post()
+        self.assertEqual(move.state, "posted")
+        self.assertFalse(self._bonus_lines(move))
+        # Con otra factura cruza el tramo: el 4% va sobre la mercadería, nunca sobre el flete.
+        inv2 = self._invoice(10, 200_000, post=False)
+        wizard = self._wizard(inv2)
+        wizard.action_apply()
+        refund_lines = self.env["account.move.line"].search([("vd_source_move_id", "=", move.id)])
+        self.assertAlmostEqual(sum(refund_lines.mapped("price_subtotal")), 316_000)
