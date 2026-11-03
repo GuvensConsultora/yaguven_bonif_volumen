@@ -137,6 +137,9 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         wizard = self._wizard(inv3)
         self.assertEqual(wizard.total, 9_000_000)
         self.assertEqual(wizard.percent, 4)
+        # La negrita llega como HTML, no como "<b>" escapado a texto.
+        self.assertIn("<b>", str(wizard.explanation))
+        self.assertNotIn("&lt;b&gt;", str(wizard.explanation))
         result = wizard.action_apply()
 
         self.assertEqual(inv3.state, "posted")

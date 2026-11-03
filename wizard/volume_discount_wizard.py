@@ -80,14 +80,17 @@ class VolumeDiscountWizard(models.TransientModel):
         }))
 
         previous = [p for p in data["pending"] if p["move"] != move]
+        # La plantilla trae <b>: se marca como HTML y Markup escapa sólo los valores. Pasar
+        # los valores a env._ escapaba también las etiquetas y se veían "<b>" literales.
         parts = [
-            self.env._(
+            Markup(self.env._(
                 "El cliente lleva facturado en %(month)s <b>%(total)s</b> (%(before)s antes de esta "
-                "factura + %(own)s de esta). Según la %(scope)s le corresponde <b>%(pct)s%%</b>.",
-                month=escape(date_from.strftime("%m/%Y")), total=escape(fmt(data["total"])),
-                before=escape(fmt(data["accumulated_before"])), own=escape(fmt(data["own_volume"])),
-                scope=escape(scope), pct=f"{data['percent']:g}",
-            ),
+                "factura + %(own)s de esta). Según la %(scope)s le corresponde <b>%(pct)s%%</b>."
+            )) % {
+                "month": date_from.strftime("%m/%Y"), "total": fmt(data["total"]),
+                "before": fmt(data["accumulated_before"]), "own": fmt(data["own_volume"]),
+                "scope": scope, "pct": f"{data['percent']:g}",
+            },
         ]
         if move.id in pending:
             parts.append(self.env._(

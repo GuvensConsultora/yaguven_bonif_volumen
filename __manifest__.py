@@ -1,6 +1,6 @@
 {
     "name": "Yagüven Bonificación por Volumen",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.3.1",
     "summary": "Bonificación por monto de compra mensual: escala por lista de precios y por cliente, "
                "línea de descuento en la factura que cruza el tramo y NC por las anteriores",
     "description": """
