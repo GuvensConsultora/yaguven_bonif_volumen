@@ -253,3 +253,64 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         wizard.action_apply()
         refund_lines = self.env["account.move.line"].search([("vd_source_move_id", "=", move.id)])
         self.assertAlmostEqual(sum(refund_lines.mapped("price_subtotal")), 316_000)
+
+    # ----------------------------------------------- pieza 2: NC confirmada y aplicada
+
+    def _pay(self, move, amount=None):
+        self.env["account.payment.register"].with_context(
+            active_model="account.move", active_ids=move.ids,
+        ).create({"amount": amount or move.amount_residual}).action_create_payments()
+
+    def test_refund_posted_linked_and_applied_per_invoice(self):
+        inv1 = self._invoice(5, 2_000_000)
+        inv2 = self._invoice(15, 3_000_000)
+        inv3 = self._invoice(27, 4_000_000, post=False)
+        wizard = self._wizard(inv3)
+        self.assertFalse(wizard.refund_number_required)
+        refund = self.env["account.move"].browse(wizard.action_apply()["res_id"])
+
+        self.assertEqual(refund.state, "posted")
+        # Asociada a la última factura que bonifica (no a la que cruza el tramo).
+        self.assertEqual(refund.reversed_entry_id, inv2)
+        # Cada factura recibe exactamente su bonificación, no lo que reparte el nativo.
+        self.assertAlmostEqual(inv1.amount_residual, 2_000_000 - 80_000)
+        self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 120_000)
+        self.assertAlmostEqual(refund.amount_residual, 0)
+        self.assertEqual(refund.payment_state, "paid")
+        self.assertEqual(inv1.payment_state, "partial")
+
+    def test_paid_invoice_leaves_credit_balance(self):
+        inv1 = self._invoice(5, 2_000_000)
+        self._pay(inv1)
+        inv2 = self._invoice(15, 3_000_000)
+        inv3 = self._invoice(27, 4_000_000, post=False)
+        refund = self.env["account.move"].browse(self._wizard(inv3).action_apply()["res_id"])
+
+        self.assertEqual(refund.state, "posted")
+        self.assertAlmostEqual(inv1.amount_residual, 0)
+        self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 120_000)
+        # Lo de la factura cobrada queda como saldo a favor del cliente.
+        self.assertAlmostEqual(refund.amount_residual, 80_000)
+
+    def test_partially_paid_invoice_takes_only_its_residual(self):
+        inv1 = self._invoice(5, 2_000_000)
+        self._pay(inv1, 1_950_000)  # le quedan 50.000; su bonificación es 80.000
+        self._invoice(15, 3_000_000)
+        inv3 = self._invoice(27, 4_000_000, post=False)
+        refund = self.env["account.move"].browse(self._wizard(inv3).action_apply()["res_id"])
+        self.assertAlmostEqual(inv1.amount_residual, 0)
+        self.assertEqual(inv1.payment_state, "paid")
+        self.assertAlmostEqual(refund.amount_residual, 30_000)
+
+    def test_next_tier_refund_applied(self):
+        inv1 = self._invoice(5, 2_000_000)
+        inv2 = self._invoice(15, 3_000_000)
+        inv3 = self._invoice(27, 4_000_000, post=False)
+        self._wizard(inv3).action_apply()
+        inv4 = self._invoice(28, 25_000_000, post=False)
+        refund = self.env["account.move"].browse(self._wizard(inv4).action_apply()["res_id"])
+        self.assertEqual(refund.reversed_entry_id, inv3)
+        self.assertAlmostEqual(inv1.amount_residual, 2_000_000 - 160_000)
+        self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 240_000)
+        self.assertAlmostEqual(inv3.amount_residual, 3_840_000 - 160_000)
+        self.assertAlmostEqual(refund.amount_residual, 0)

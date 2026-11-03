@@ -25,6 +25,12 @@ class VolumeDiscountWizard(models.TransientModel):
     line_ids = fields.One2many(
         "yaguven.volume.discount.wizard.line", "wizard_id", string="Ventas del mes", readonly=True,
     )
+    refund_number_required = fields.Boolean(readonly=True)
+    refund_document_number = fields.Char(
+        string="Número de la nota de crédito",
+        help="El diario numera a mano este tipo de comprobante (talonario preimpreso: la "
+             "primera de cada tipo). Cargá el número del talonario, por ejemplo 0001-00000123.",
+    )
 
     @api.model
     def default_get(self, fields_list):
@@ -90,8 +96,9 @@ class VolumeDiscountWizard(models.TransientModel):
             ))
         if previous:
             parts.append(self.env._(
-                "Por las %(n)s facturas anteriores del mes se genera una nota de crédito en "
-                "borrador, con una línea por factura y el %% que le falta a cada una.",
+                "Por las %(n)s facturas anteriores del mes se emite una nota de crédito, con una "
+                "línea por factura y el %% que le falta a cada una, y se aplica a cada factura "
+                "por su importe. Si alguna ya está cobrada, esa parte queda como saldo a favor.",
                 n=len(previous),
             ))
         return {
@@ -105,7 +112,24 @@ class VolumeDiscountWizard(models.TransientModel):
             "scale_text": scale_text,
             "explanation": Markup("<p>%s</p>") % Markup("</p><p>").join(Markup(p) for p in parts),
             "line_ids": lines,
+            "refund_number_required": bool(previous) and self._refund_needs_manual_number(move),
         }
+
+    @api.model
+    def _refund_needs_manual_number(self, move):
+        """Si el diario pide el número de la NC a mano (localización con documentos y
+        talonario preimpreso, en la primera NC de cada tipo). Sin esa localización, no."""
+        Move = self.env["account.move"]
+        if "l10n_latam_manual_document_number" not in Move._fields:
+            return False
+        probe = Move.new({
+            "move_type": "out_refund",
+            "company_id": move.company_id.id,
+            "partner_id": move.commercial_partner_id.id,
+            "journal_id": move.journal_id.id,
+            "reversed_entry_id": move.id,
+        })
+        return bool(probe.l10n_latam_use_documents and probe.l10n_latam_manual_document_number)
 
     # ----------------------------------------------------------------- acciones
 
@@ -126,15 +150,31 @@ class VolumeDiscountWizard(models.TransientModel):
                 v["price_unit"] = -v["price_unit"]
             move.write({"invoice_line_ids": [fields.Command.create(v) for v in vals]})
 
-        refunds = self._create_refunds(move, [p for p in pending if p["move"] != move])
+        previous = [p for p in pending if p["move"] != move]
+        if previous and self._refund_needs_manual_number(move) and not self.refund_document_number:
+            raise UserError(self.env._(
+                "Falta el número de la nota de crédito: este diario lo pide a mano."
+            ))
+        refunds = self._create_refunds(move, previous)
         move.with_context(vd_checked=True).action_post()
+        # Todo en la misma transacción: si la NC no se puede confirmar, tampoco la factura.
+        refunds.with_context(vd_refund_reconcile=True).action_post()
+        for refund in refunds:
+            refund._vd_reconcile_refund()
 
         if refunds:
             links = Markup(", ").join(r._get_html_link() for r in refunds)
             move.message_post(body=Markup(self.env._(
-                "Bonificación por volumen del %(pct)s%%: nota de crédito en borrador %(links)s "
-                "por las facturas anteriores del mes.", pct=f"{data['percent']:g}", links=links,
+                "Bonificación por volumen del %(pct)s%%: nota de crédito %(links)s por las "
+                "facturas anteriores del mes, aplicada a cada una por su importe.",
+                pct=f"{data['percent']:g}", links=links,
             )))
+            for refund in refunds:
+                for source in refund.invoice_line_ids.vd_source_move_id:
+                    source.message_post(body=Markup(self.env._(
+                        "Bonificación por volumen: se le aplicó la nota de crédito %(link)s.",
+                        link=refund._get_html_link(),
+                    )))
             return {
                 "type": "ir.actions.act_window",
                 "res_model": "account.move",
@@ -145,16 +185,23 @@ class VolumeDiscountWizard(models.TransientModel):
         return {"type": "ir.actions.act_window_close"}
 
     def _create_refunds(self, move, previous):
-        """Una NC en borrador por moneda, con una línea por factura anterior y grupo de IVA."""
+        """Una NC por moneda, con una línea por factura anterior y grupo de IVA. Queda
+        asociada (comprobante asociado para ARCA) a la última factura que bonifica."""
         by_currency = defaultdict(list)
         for p in previous:
             by_currency[p["move"].currency_id].append(p)
+        if len(by_currency) > 1 and self.refund_document_number:
+            raise UserError(self.env._(
+                "Las facturas a bonificar están en más de una moneda y saldrían dos notas de "
+                "crédito, pero hay un solo número cargado. Emitilas por separado."
+            ))
         refunds = self.env["account.move"]
         for currency, items in by_currency.items():
             lines = []
             for p in items:
                 lines += [fields.Command.create(v) for v in p["move"]._vd_discount_vals(p["percent"])]
-            refunds |= self.env["account.move"].create({
+            last = max((p["move"] for p in items), key=lambda m: (m.invoice_date, m.id))
+            vals = {
                 "move_type": "out_refund",
                 "company_id": move.company_id.id,
                 "partner_id": move.commercial_partner_id.id,
@@ -164,7 +211,11 @@ class VolumeDiscountWizard(models.TransientModel):
                 "invoice_origin": ", ".join(p["move"].name for p in items),
                 "ref": self.env._("Bonificación por volumen %(period)s", period=self.period),
                 "invoice_line_ids": lines,
-            })
+                "reversed_entry_id": last.id,
+            }
+            if self.refund_document_number:
+                vals["l10n_latam_document_number"] = self.refund_document_number
+            refunds |= self.env["account.move"].create(vals)
         return refunds
 
     def action_post_without_discount(self):

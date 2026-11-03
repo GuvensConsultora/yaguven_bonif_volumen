@@ -177,6 +177,85 @@ class AccountMove(models.Model):
             })
         return vals
 
+    # ------------------------------------------------------- conciliación de la NC
+
+    def _reconcile_reversed_moves(self, reverse_moves, move_reverse_cancel):
+        # Al confirmar una NC con comprobante asociado, el nativo la concilia entera contra
+        # esa factura. La NC de bonificación cubre varias facturas y se aplica por importe
+        # en _vd_reconcile_refund: acá se la deja afuera, sólo cuando la confirma el asistente.
+        if not self.env.context.get("vd_refund_reconcile"):
+            return super()._reconcile_reversed_moves(reverse_moves, move_reverse_cancel)
+        keep = [(m, r) for m, r in zip(self, reverse_moves) if not r.invoice_line_ids.vd_source_move_id]
+        if keep:
+            super(AccountMove, self.browse([m.id for m, _r in keep]))._reconcile_reversed_moves(
+                self.browse([r.id for _m, r in keep]), move_reverse_cancel)
+        return reverse_moves
+
+    def _vd_reconcile_refund(self):
+        """Aplica la NC de bonificación (self) a cada factura que bonifica, por el importe
+        exacto de su línea (con impuestos), y no por lo que el nativo asignaría.
+
+        La conciliación nativa reparte por saldo: la primera factura se llevaría toda la NC.
+        Por eso se crean los parciales a mano. Si una factura ya está cobrada (o le queda
+        menos saldo que su bonificación), lo que no entra queda como saldo a favor en la NC.
+        """
+        self.ensure_one()
+        recv_types = ("asset_receivable", "liability_payable")
+        refund_lines = self.line_ids.filtered(
+            lambda l: l.account_id.account_type in recv_types and not l.reconciled
+        ).sorted(lambda l: (l.date_maturity or l.date, l.id))
+        if not refund_lines:
+            return self.env["account.partial.reconcile"]
+
+        # Importe (moneda del comprobante) que le toca a cada factura.
+        due = defaultdict(float)
+        for line in self.invoice_line_ids.filtered("vd_source_move_id"):
+            due[line.vd_source_move_id] += line.price_total
+        currency = self.currency_id
+        total_lines = sum(due.values())
+        # Redondeo: el IVA de la NC se redondea sobre el total y puede no coincidir al
+        # centavo con la suma de líneas. La diferencia va a la última factura.
+        total_refund = -sum(refund_lines.mapped("amount_residual_currency"))
+        sources = sorted(due, key=lambda m: (m.invoice_date, m.id))
+        diff = total_refund - total_lines
+        if sources and not currency.is_zero(diff) and abs(diff) < 1:
+            due[sources[-1]] += diff
+
+        vals_list = []
+        refund_iter = iter(refund_lines)
+        refund_line = next(refund_iter)
+        refund_left = -refund_line.amount_residual_currency
+        for source in sources:
+            want = currency.round(due[source])
+            inv_lines = source.line_ids.filtered(
+                lambda l: l.account_id in refund_lines.account_id and not l.reconciled
+                and l.amount_residual_currency > 0
+            ).sorted(lambda l: (l.date_maturity or l.date, l.id))
+            for inv_line in inv_lines:
+                while refund_line and currency.is_zero(refund_left):
+                    refund_line = next(refund_iter, None)
+                    refund_left = refund_line and -refund_line.amount_residual_currency or 0.0
+                if not refund_line or currency.is_zero(want):
+                    break
+                amount_cur = currency.round(min(want, inv_line.amount_residual_currency, refund_left))
+                if currency.is_zero(amount_cur):
+                    continue
+                # Moneda de la empresa: a la tasa de cada línea, sin pasarse de su saldo.
+                debit_amt = min(inv_line.amount_residual,
+                                inv_line.amount_residual * amount_cur / inv_line.amount_residual_currency)
+                credit_amt = min(-refund_line.amount_residual,
+                                 -refund_line.amount_residual * amount_cur / -refund_line.amount_residual_currency)
+                vals_list.append({
+                    "debit_move_id": inv_line.id,
+                    "credit_move_id": refund_line.id,
+                    "amount": self.company_currency_id.round(min(debit_amt, credit_amt)),
+                    "debit_amount_currency": amount_cur,
+                    "credit_amount_currency": amount_cur,
+                })
+                want -= amount_cur
+                refund_left -= amount_cur
+        return self.env["account.partial.reconcile"].create(vals_list)
+
     # ------------------------------------------------------------- confirmación
 
     def action_post(self):

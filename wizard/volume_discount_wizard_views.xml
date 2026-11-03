@@ -25,6 +25,11 @@
                         <field name="percent"/>
                     </group>
                 </group>
+                <field name="refund_number_required" invisible="1"/>
+                <group invisible="not refund_number_required">
+                    <field name="refund_document_number" required="refund_number_required"
+                           placeholder="0001-00000123"/>
+                </group>
                 <field name="line_ids" nolabel="1">
                     <list decoration-bf="is_current" decoration-muted="not counts">
                         <field name="currency_id" column_invisible="1"/>

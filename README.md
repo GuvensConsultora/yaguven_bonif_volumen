@@ -20,10 +20,15 @@ Ejemplo: 4% desde $5.000.000 y 5% desde $10.000.000.
 |---|---|---|---|
 | 5 | $1.000.000 | $1.000.000 | Se confirma normal. |
 | 15 | $2.000.000 | $3.000.000 | Se confirma normal. |
-| 27 | $3.000.000 | $6.000.000 | Asistente: 4% en esta factura (línea de descuento) + NC en borrador por el 4% de las del 5 y 15. |
-| 28 | $5.000.000 | $11.000.000 | Asistente: 5% en esta factura + NC en borrador por el 1% de diferencia de las del 5, 15 y 27. |
+| 27 | $3.000.000 | $6.000.000 | Asistente: 4% en esta factura (línea de descuento) + NC confirmada por el 4% de las del 5 y 15. |
+| 28 | $5.000.000 | $11.000.000 | Asistente: 5% en esta factura + NC confirmada por el 1% de diferencia de las del 5, 15 y 27. |
 
-- La **NC lleva una línea por factura bonificada** («Bonificación por volumen 4% s/ FA-A …»).
+- La **NC lleva una línea por factura bonificada** («Bonificación por volumen 4% s/ FA-A …»), se
+  confirma en el mismo paso y queda **asociada a la última factura que bonifica** (comprobante asociado).
+- La NC se **aplica a cada factura por el importe exacto de su línea** (con IVA). Si una factura ya está
+  cobrada, o le queda menos saldo que su bonificación, lo que no entra queda como saldo a favor.
+  (El nativo conciliaría toda la NC contra la factura asociada: el módulo se lo saltea sólo para estas NC.)
+- Si el diario pide el número a mano (talonario preimpreso, primera NC de cada tipo), el asistente lo pide.
 - Cada factura sabe qué % ya lleva bonificado (sus líneas + NC no canceladas), así que nunca se
   bonifica dos veces y al subir de tramo sólo se aplica la diferencia.
 - Las NC de devolución restan del acumulado; las de bonificación no.
@@ -55,7 +60,7 @@ Sin escala cargada, el módulo no interviene.
 
 - Cargar una escala, facturar al mismo cliente por debajo del tope y confirmar: confirma normal.
 - Facturar hasta cruzar el tope: aparece el asistente con las ventas del mes; al aplicar, la factura
-  queda con la línea de descuento y se abre la NC en borrador con una línea por factura anterior.
+  queda con la línea de descuento y se emite la NC, con una línea por factura anterior, aplicada a cada una.
 - Tests: `odoo-bin -i yaguven_bonif_volumen --test-tags /yaguven_bonif_volumen`.
 
 ## Licencia
