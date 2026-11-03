@@ -39,6 +39,12 @@ class AccountMove(models.Model):
         help="Lo facturado al cliente en el mes, neto de notas de crédito, sumando esta factura. "
              "Se compara contra la escala de bonificación por volumen.",
     )
+    # Sólo en pantalla y en borrador (pedido 03/11/2026): sale de los mismos tramos de la
+    # escala, así que no hay montos aparte que mantener.
+    vd_next_tier_text = fields.Char(
+        string="Próximo escalón", compute="_compute_vd_month_volume_preview",
+        help="Cuánto le falta al cliente en el mes para llegar al siguiente tramo de la escala.",
+    )
     vd_month_volume = fields.Monetary(
         string="Comprado en el mes (al confirmar)", currency_field="company_currency_id",
         copy=False, readonly=True,
@@ -50,6 +56,17 @@ class AccountMove(models.Model):
             data = move._vd_month_data()
             move.vd_has_scale = bool(data)
             move.vd_month_volume_preview = data["total"] if data else 0.0
+            move.vd_next_tier_text = move._vd_next_tier_text(data) if data else False
+
+    def _vd_next_tier_text(self, data):
+        nxt = data["scale"].filtered(lambda t: t.amount_from > data["total"])[:1]
+        if not nxt:
+            return False
+        return self.env._(
+            "faltan %(amount)s para el %(pct)s%%",
+            amount=self.company_currency_id.format(nxt.amount_from - data["total"]),
+            pct=f"{nxt.percent:g}",
+        )
 
     def _vd_month_data(self):
         """Como _vd_compute, pero sin error si a la empresa le falta configuración: para

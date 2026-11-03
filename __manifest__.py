@@ -1,6 +1,6 @@
 {
     "name": "Yagüven Bonificación por Volumen",
-    "version": "19.0.1.4.0",
+    "version": "19.0.1.5.0",
     "summary": "Bonificación por monto de compra mensual: escala por lista de precios y por cliente, "
                "línea de descuento en la factura que cruza el tramo y NC por las anteriores",
     "description": """
@@ -16,7 +16,8 @@ Bonificación por volumen de compra en el mes calendario.
   nota de crédito confirmada, con una línea por cada factura anterior del mes, aplicada
   a cada una por su importe.
 * Muestra en la factura lo que el cliente lleva comprado en el mes y, al confirmar, lo
-  deja escrito en las notas (se imprime en el comprobante).
+  deja escrito en las notas (se imprime en el comprobante). En borrador muestra además
+  cuánto le falta para el próximo tramo (sólo en pantalla, no se imprime).
 * Al pasar a un tramo superior, bonifica sólo la diferencia sobre lo ya aplicado.
 
 Construido por herencia sobre account.move, sin reemplazar acciones del core.

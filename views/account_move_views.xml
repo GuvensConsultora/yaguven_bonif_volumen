@@ -11,6 +11,8 @@
                 <field name="vd_has_scale" invisible="1"/>
                 <field name="vd_month_volume_preview"
                        invisible="state != 'draft' or not vd_has_scale"/>
+                <field name="vd_next_tier_text"
+                       invisible="state != 'draft' or not vd_next_tier_text"/>
                 <field name="vd_month_volume" string="Comprado en el mes"
                        invisible="state == 'draft' or not vd_month_volume"/>
             </xpath>

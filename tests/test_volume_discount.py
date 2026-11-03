@@ -362,3 +362,18 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         inv.action_post()
         self.assertEqual(self._note_count(inv), 1)
         self.assertIn("Entregar por la tarde", str(inv.narration))
+
+    def test_next_tier_text_only_on_screen(self):
+        self._invoice(5, 2_000_000)
+        draft = self._invoice(15, 3_000_000, post=False)
+        fmt = draft.company_currency_id.format
+        self.assertEqual(draft.vd_next_tier_text, f"faltan {fmt(3_000_000)} para el 4%")
+        draft.action_post()
+        self.assertNotIn("faltan", str(draft.narration))
+
+    def test_next_tier_text_points_to_second_tier_and_ends_at_top(self):
+        self._invoice(5, 10_000_000)
+        draft = self._invoice(15, 1_000_000, post=False)
+        self.assertEqual(draft.vd_next_tier_text, f"faltan {draft.company_currency_id.format(22_000_000)} para el 8%")
+        top = self._invoice(16, 30_000_000, post=False)
+        self.assertFalse(top.vd_next_tier_text, "Arriba del último tramo no hay próximo escalón")
