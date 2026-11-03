@@ -1,4 +1,7 @@
+import re
 from collections import defaultdict
+
+from markupsafe import Markup
 
 from odoo import fields, models
 from odoo.exceptions import UserError
@@ -26,6 +29,62 @@ class AccountMove(models.Model):
     vd_line_ids = fields.One2many(
         "account.move.line", "vd_source_move_id", string="Bonificaciones aplicadas",
     )
+    # Compras del mes del cliente, incluida esta factura. En borrador se calcula en vivo
+    # (para que quien factura lo vea sin ir al mayor); al confirmar se fija en
+    # vd_month_volume y se escribe en las notas, que es lo que se imprime.
+    vd_has_scale = fields.Boolean(compute="_compute_vd_month_volume_preview")
+    vd_month_volume_preview = fields.Monetary(
+        string="Comprado en el mes", currency_field="company_currency_id",
+        compute="_compute_vd_month_volume_preview",
+        help="Lo facturado al cliente en el mes, neto de notas de crédito, sumando esta factura. "
+             "Se compara contra la escala de bonificación por volumen.",
+    )
+    vd_month_volume = fields.Monetary(
+        string="Comprado en el mes (al confirmar)", currency_field="company_currency_id",
+        copy=False, readonly=True,
+        help="Lo que el cliente llevaba comprado en el mes cuando se confirmó esta factura.",
+    )
+
+    def _compute_vd_month_volume_preview(self):
+        for move in self:
+            data = move._vd_month_data()
+            move.vd_has_scale = bool(data)
+            move.vd_month_volume_preview = data["total"] if data else 0.0
+
+    def _vd_month_data(self):
+        """Como _vd_compute, pero sin error si a la empresa le falta configuración: para
+        mostrar el acumulado no hace falta el producto de bonificación."""
+        self.ensure_one()
+        if self.move_type != "out_invoice" or not self.commercial_partner_id or not self.company_id:
+            return None
+        if not self.env["yaguven.volume.discount.tier"]._get_scale(self.company_id, self.partner_id):
+            return None
+        if not self.company_id.vd_base:
+            return None
+        if not self.company_id.vd_product_id:
+            # _vd_compute exige el producto sólo para poder bonificar; el acumulado no lo usa.
+            return self.with_context(vd_skip_product_check=True)._vd_compute()
+        return self._vd_compute()
+
+    _VD_NOTE_RE = re.compile(r"<p>\s*Compras del mes \d{2}/\d{4}:[^<]*</p>")
+
+    def _vd_stamp_month_volume(self):
+        """Al confirmar: fija lo comprado en el mes y lo deja en las notas de la factura
+        (una sola línea, reemplaza la de una confirmación anterior)."""
+        for move in self:
+            data = move._vd_month_data()
+            if not data:
+                continue
+            date_from, _date_to = move._vd_period()
+            text = self.env._("Compras del mes %(month)s: %(amount)s",
+                              month=date_from.strftime("%m/%Y"),
+                              amount=move.company_currency_id.format(data["total"]))
+            previous = self._VD_NOTE_RE.sub("", str(move.narration or ""))
+            note = Markup("<p>%s</p>") % text
+            move.write({
+                "vd_month_volume": data["total"],
+                "narration": Markup(previous) + note if previous.strip() else note,
+            })
 
     # ------------------------------------------------------------------ cálculo
 
@@ -102,7 +161,9 @@ class AccountMove(models.Model):
         scale = self.env["yaguven.volume.discount.tier"]._get_scale(company, self.partner_id)
         if not scale:
             return None
-        if not company.vd_product_id or not company.vd_base:
+        if not company.vd_base or (
+            not company.vd_product_id and not self.env.context.get("vd_skip_product_check")
+        ):
             raise UserError(self.env._(
                 "El cliente %(partner)s tiene escala de bonificación por volumen, pero falta "
                 "completar en la empresa %(company)s el producto de bonificación y el monto "
@@ -289,4 +350,5 @@ class AccountMove(models.Model):
                         "botón Confirmar de la factura para revisar el detalle.",
                         move.display_name,
                     ))
+        self.filtered(lambda m: m.move_type == "out_invoice")._vd_stamp_month_volume()
         return super()._post(soft=soft)

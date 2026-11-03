@@ -317,3 +317,48 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 240_000)
         self.assertAlmostEqual(inv3.amount_residual, 3_840_000 - 160_000)
         self.assertAlmostEqual(refund.amount_residual, 0)
+
+    # ------------------------------------------------- compras del mes en la factura
+
+    def _note_count(self, move):
+        return str(move.narration or "").count("Compras del mes 11/2026")
+
+    def test_draft_shows_month_volume_including_itself(self):
+        self._invoice(5, 2_000_000)
+        draft = self._invoice(15, 3_000_000, post=False)
+        self.assertTrue(draft.vd_has_scale)
+        self.assertEqual(draft.vd_month_volume_preview, 5_000_000)
+
+    def test_post_stamps_month_volume_in_notes(self):
+        self._invoice(5, 2_000_000)
+        inv = self._invoice(15, 3_000_000, post=False)
+        inv.action_post()  # no cruza tramo: confirma directo
+        self.assertEqual(inv.state, "posted")
+        self.assertEqual(inv.vd_month_volume, 5_000_000)
+        self.assertEqual(self._note_count(inv), 1)
+        self.assertIn(inv.company_currency_id.format(5_000_000).replace("\xa0", "&nbsp;"), str(inv.narration))
+
+    def test_wizard_post_stamps_gross_month_volume(self):
+        self._invoice(5, 2_000_000)
+        self._invoice(15, 3_000_000)
+        inv = self._invoice(27, 4_000_000, post=False)
+        self._wizard(inv).action_apply()
+        # Acumulado bruto: la línea de bonificación de esta factura no lo achica.
+        self.assertEqual(inv.vd_month_volume, 9_000_000)
+        self.assertEqual(self._note_count(inv), 1)
+
+    def test_partner_without_scale_has_no_month_note(self):
+        inv = self._invoice(5, 2_000_000, partner=self.partner_b, post=False)
+        self.assertFalse(inv.vd_has_scale)
+        inv.action_post()
+        self.assertFalse(inv.vd_month_volume)
+        self.assertEqual(self._note_count(inv), 0)
+
+    def test_repost_keeps_a_single_note_and_existing_text(self):
+        inv = self._invoice(5, 2_000_000, post=False)
+        inv.narration = "<p>Entregar por la tarde</p>"
+        inv.action_post()
+        inv.button_draft()
+        inv.action_post()
+        self.assertEqual(self._note_count(inv), 1)
+        self.assertIn("Entregar por la tarde", str(inv.narration))
