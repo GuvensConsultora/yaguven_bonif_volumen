@@ -99,10 +99,11 @@ class VolumeDiscountWizard(models.TransientModel):
             ))
         if previous:
             parts.append(self.env._(
-                "Por las %(n)s facturas anteriores del mes se emite una nota de crédito, con una "
-                "línea por factura y el %% que le falta a cada una, y se aplica a cada factura "
-                "por su importe. Si alguna ya está cobrada, esa parte queda como saldo a favor.",
-                n=len(previous),
+                "Por las %(n)s facturas anteriores del mes se emite una nota de crédito por el "
+                "período %(month)s (sin factura asociada), con una línea por factura y el %% que "
+                "le falta a cada una, y se aplica a cada factura por su importe. Si alguna ya "
+                "está cobrada, esa parte queda como saldo a favor.",
+                n=len(previous), month=date_from.strftime("%m/%Y"),
             ))
         return {
             "move_id": move.id,
@@ -130,7 +131,6 @@ class VolumeDiscountWizard(models.TransientModel):
             "company_id": move.company_id.id,
             "partner_id": move.commercial_partner_id.id,
             "journal_id": move.journal_id.id,
-            "reversed_entry_id": move.id,
         })
         return bool(probe.l10n_latam_use_documents and probe.l10n_latam_manual_document_number)
 
@@ -161,7 +161,7 @@ class VolumeDiscountWizard(models.TransientModel):
         refunds = self._create_refunds(move, previous)
         move.with_context(vd_checked=True).action_post()
         # Todo en la misma transacción: si la NC no se puede confirmar, tampoco la factura.
-        refunds.with_context(vd_refund_reconcile=True).action_post()
+        refunds.action_post()
         for refund in refunds:
             refund._vd_reconcile_refund()
 
@@ -188,8 +188,18 @@ class VolumeDiscountWizard(models.TransientModel):
         return {"type": "ir.actions.act_window_close"}
 
     def _create_refunds(self, move, previous):
-        """Una NC por moneda, con una línea por factura anterior y grupo de IVA. Queda
-        asociada (comprobante asociado para ARCA) a la última factura que bonifica."""
+        """Una NC por moneda, con una línea por factura anterior y grupo de IVA.
+
+        Va por PERÍODO, no asociada a una factura (RG 4540/2019, art. 3): sin
+        reversed_entry_id, con el mes en vd_period_start/end y, como el sistema no tiene
+        campo propio para el período, también en la referencia y en las notas que se
+        imprimen (art. 4). Las facturas que bonifica quedan en invoice_origin y en el
+        vd_source_move_id de cada línea, que es por donde se concilia."""
+        date_from, date_to = move._vd_period()
+        legend = self.env._(
+            "Bonificación por volumen mensual — Período ajustado: %(start)s al %(end)s",
+            start=date_from.strftime("%d/%m/%Y"), end=date_to.strftime("%d/%m/%Y"),
+        )
         by_currency = defaultdict(list)
         for p in previous:
             by_currency[p["move"].currency_id].append(p)
@@ -203,7 +213,6 @@ class VolumeDiscountWizard(models.TransientModel):
             lines = []
             for p in items:
                 lines += [fields.Command.create(v) for v in p["move"]._vd_discount_vals(p["percent"])]
-            last = max((p["move"] for p in items), key=lambda m: (m.invoice_date, m.id))
             vals = {
                 "move_type": "out_refund",
                 "company_id": move.company_id.id,
@@ -212,9 +221,11 @@ class VolumeDiscountWizard(models.TransientModel):
                 "journal_id": move.journal_id.id,
                 "invoice_date": move.invoice_date or fields.Date.context_today(self),
                 "invoice_origin": ", ".join(p["move"].name for p in items),
-                "ref": self.env._("Bonificación por volumen %(period)s", period=self.period),
+                "ref": legend,
+                "narration": Markup("<p>%s</p>") % legend,
+                "vd_period_start": date_from,
+                "vd_period_end": date_to,
                 "invoice_line_ids": lines,
-                "reversed_entry_id": last.id,
             }
             if self.refund_document_number:
                 vals["l10n_latam_document_number"] = self.refund_document_number

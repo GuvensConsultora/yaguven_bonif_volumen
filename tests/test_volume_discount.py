@@ -264,7 +264,7 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
             active_model="account.move", active_ids=move.ids,
         ).create({"amount": amount or move.amount_residual}).action_create_payments()
 
-    def test_refund_posted_linked_and_applied_per_invoice(self):
+    def test_refund_posted_by_period_and_applied_per_invoice(self):
         inv1 = self._invoice(5, 2_000_000)
         inv2 = self._invoice(15, 3_000_000)
         inv3 = self._invoice(27, 4_000_000, post=False)
@@ -273,8 +273,17 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         refund = self.env["account.move"].browse(wizard.action_apply()["res_id"])
 
         self.assertEqual(refund.state, "posted")
-        # Asociada a la última factura que bonifica (no a la que cruza el tramo).
-        self.assertEqual(refund.reversed_entry_id, inv2)
+        # Por PERÍODO (RG 4540, art. 3), sin factura asociada.
+        self.assertFalse(refund.reversed_entry_id)
+        self.assertEqual(str(refund.vd_period_start), "2026-11-01")
+        self.assertEqual(str(refund.vd_period_end), "2026-11-30")
+        # El período va impreso (art. 4): en la referencia y en las notas.
+        legend = "Período ajustado: 01/11/2026 al 30/11/2026"
+        self.assertIn(legend, refund.ref)
+        self.assertIn(legend, str(refund.narration))
+        # Las facturas que bonifica quedan identificadas en el origen.
+        self.assertIn(inv1.name, refund.invoice_origin)
+        self.assertIn(inv2.name, refund.invoice_origin)
         # Cada factura recibe exactamente su bonificación, no lo que reparte el nativo.
         self.assertAlmostEqual(inv1.amount_residual, 2_000_000 - 80_000)
         self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 120_000)
@@ -312,7 +321,8 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         self._wizard(inv3).action_apply()
         inv4 = self._invoice(28, 25_000_000, post=False)
         refund = self.env["account.move"].browse(self._wizard(inv4).action_apply()["res_id"])
-        self.assertEqual(refund.reversed_entry_id, inv3)
+        self.assertFalse(refund.reversed_entry_id)
+        self.assertEqual(str(refund.vd_period_start), "2026-11-01")
         self.assertAlmostEqual(inv1.amount_residual, 2_000_000 - 160_000)
         self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 240_000)
         self.assertAlmostEqual(inv3.amount_residual, 3_840_000 - 160_000)

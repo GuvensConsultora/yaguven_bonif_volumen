@@ -15,6 +15,14 @@
                        invisible="state != 'draft' or not vd_next_tier_text"/>
                 <field name="vd_month_volume" string="Comprado en el mes"
                        invisible="state == 'draft' or not vd_month_volume"/>
+                <!-- NC de bonificación: va por período, no asociada a una factura (RG 4540). -->
+                <label for="vd_period_start" string="Período ajustado"
+                       invisible="not vd_period_start"/>
+                <div class="d-flex gap-2" invisible="not vd_period_start">
+                    <field name="vd_period_start" class="oe_inline"/>
+                    <span>al</span>
+                    <field name="vd_period_end" class="oe_inline"/>
+                </div>
             </xpath>
         </field>
     </record>

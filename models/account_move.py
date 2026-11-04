@@ -50,6 +50,18 @@ class AccountMove(models.Model):
         copy=False, readonly=True,
         help="Lo que el cliente llevaba comprado en el mes cuando se confirmó esta factura.",
     )
+    # NC de bonificación: va por PERÍODO y no asociada a una factura (RG 4540/2019, art. 3:
+    # «el número de las facturas… asociados o el período al cual ajustan»). Mientras el
+    # sistema no tenga campo propio, el período va también en las notas impresas (art. 4).
+    # Quedan guardados para poder mandarlos como PeriodoAsoc cuando se emita por WSFE.
+    vd_period_start = fields.Date(
+        string="Período ajustado desde", copy=False, readonly=True,
+        help="Primer día del mes que ajusta esta nota de crédito de bonificación por volumen.",
+    )
+    vd_period_end = fields.Date(
+        string="Período ajustado hasta", copy=False, readonly=True,
+        help="Último día del mes que ajusta esta nota de crédito de bonificación por volumen.",
+    )
 
     def _compute_vd_month_volume_preview(self):
         for move in self:
@@ -256,18 +268,6 @@ class AccountMove(models.Model):
         return vals
 
     # ------------------------------------------------------- conciliación de la NC
-
-    def _reconcile_reversed_moves(self, reverse_moves, move_reverse_cancel):
-        # Al confirmar una NC con comprobante asociado, el nativo la concilia entera contra
-        # esa factura. La NC de bonificación cubre varias facturas y se aplica por importe
-        # en _vd_reconcile_refund: acá se la deja afuera, sólo cuando la confirma el asistente.
-        if not self.env.context.get("vd_refund_reconcile"):
-            return super()._reconcile_reversed_moves(reverse_moves, move_reverse_cancel)
-        keep = [(m, r) for m, r in zip(self, reverse_moves) if not r.invoice_line_ids.vd_source_move_id]
-        if keep:
-            super(AccountMove, self.browse([m.id for m, _r in keep]))._reconcile_reversed_moves(
-                self.browse([r.id for _m, r in keep]), move_reverse_cancel)
-        return reverse_moves
 
     def _vd_reconcile_refund(self):
         """Aplica la NC de bonificación (self) a cada factura que bonifica, por el importe
