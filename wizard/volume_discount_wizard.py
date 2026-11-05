@@ -80,6 +80,7 @@ class VolumeDiscountWizard(models.TransientModel):
         }))
 
         previous = [p for p in data["pending"] if p["move"] != move]
+        period = self._refund_period(move)
         # La plantilla trae <b>: se marca como HTML y Markup escapa sólo los valores. Pasar
         # los valores a env._ escapaba también las etiquetas y se veían "<b>" literales.
         parts = [
@@ -100,11 +101,20 @@ class VolumeDiscountWizard(models.TransientModel):
         if previous:
             parts.append(self.env._(
                 "Por las %(n)s facturas anteriores del mes se emite una nota de crédito por el "
-                "período %(month)s (sin factura asociada), con una línea por factura y el %% que "
-                "le falta a cada una, y se aplica a cada factura por su importe. Si alguna ya "
-                "está cobrada, esa parte queda como saldo a favor.",
-                n=len(previous), month=date_from.strftime("%m/%Y"),
+                "período %(start)s al %(end)s (sin factura asociada), con una línea por factura "
+                "y el %% que le falta a cada una, y se aplica a cada factura por su importe. Si "
+                "alguna ya está cobrada, esa parte queda como saldo a favor.",
+                n=len(previous), start=period[0].strftime("%d/%m/%Y"),
+                end=period[1].strftime("%d/%m/%Y"),
             ))
+            later = [p["move"] for p in previous if p["move"].invoice_date > period[1]]
+            if later:
+                parts.append(Markup("<b>%s</b>") % self.env._(
+                    "Atención: %(invoices)s tiene fecha posterior a esta factura y quedaría fuera "
+                    "del período de la nota de crédito. Así no se puede aplicar la bonificación: "
+                    "corregí la fecha de esta factura.",
+                    invoices=", ".join(m.name for m in later),
+                ))
         return {
             "move_id": move.id,
             "period": date_from.strftime("%m/%Y"),
@@ -187,6 +197,13 @@ class VolumeDiscountWizard(models.TransientModel):
             }
         return {"type": "ir.actions.act_window_close"}
 
+    @api.model
+    def _refund_period(self, move):
+        """(desde, hasta) de la NC: del 1° del mes a la fecha de la NC, que es la de la
+        factura que cruza el tramo (o hoy, si todavía no tiene fecha)."""
+        date_from, _end_of_month = move._vd_period()
+        return date_from, move.invoice_date or fields.Date.context_today(self)
+
     def _create_refunds(self, move, previous):
         """Una NC por moneda, con una línea por factura anterior y grupo de IVA.
 
@@ -194,8 +211,23 @@ class VolumeDiscountWizard(models.TransientModel):
         reversed_entry_id, con el mes en vd_period_start/end y, como el sistema no tiene
         campo propio para el período, también en la referencia y en las notas que se
         imprimen (art. 4). Las facturas que bonifica quedan en invoice_origin y en el
-        vd_source_move_id de cada línea, que es por donde se concilia."""
-        date_from, date_to = move._vd_period()
+        vd_source_move_id de cada línea, que es por donde se concilia.
+
+        El período va del 1° del mes a la FECHA DE LA NC, no a fin de mes: ARCA rechaza un
+        PeriodoAsoc que termina después de la fecha del comprobante (10208, medido en
+        homologación 04/11/2026). Por eso ninguna factura a bonificar puede tener fecha
+        posterior a la NC: quedaría fuera del período que ajusta."""
+        date_from, date_to = self._refund_period(move)
+        later = [p["move"] for p in previous if p["move"].invoice_date > date_to]
+        if later:
+            raise UserError(self.env._(
+                "No se puede emitir la nota de crédito de bonificación: %(invoices)s tiene fecha "
+                "posterior a esta factura (%(date)s) y quedaría fuera del período de la nota de "
+                "crédito. Confirmá esta factura con fecha igual o posterior a %(last)s.",
+                invoices=", ".join(m.name for m in later),
+                date=date_to.strftime("%d/%m/%Y"),
+                last=max(m.invoice_date for m in later).strftime("%d/%m/%Y"),
+            ))
         legend = self.env._(
             "Bonificación por volumen mensual — Período ajustado: %(start)s al %(end)s",
             start=date_from.strftime("%d/%m/%Y"), end=date_to.strftime("%d/%m/%Y"),
@@ -219,7 +251,7 @@ class VolumeDiscountWizard(models.TransientModel):
                 "partner_id": move.commercial_partner_id.id,
                 "currency_id": currency.id,
                 "journal_id": move.journal_id.id,
-                "invoice_date": move.invoice_date or fields.Date.context_today(self),
+                "invoice_date": date_to,
                 "invoice_origin": ", ".join(p["move"].name for p in items),
                 "ref": legend,
                 "narration": Markup("<p>%s</p>") % legend,

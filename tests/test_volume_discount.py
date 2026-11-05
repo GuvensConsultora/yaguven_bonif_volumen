@@ -275,10 +275,13 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         self.assertEqual(refund.state, "posted")
         # Por PERÍODO (RG 4540, art. 3), sin factura asociada.
         self.assertFalse(refund.reversed_entry_id)
+        # Del 1° del mes a la fecha de la NC (la de la factura que cruza el tramo), no a fin
+        # de mes: ARCA rechaza un período que termina después del comprobante (10208).
+        self.assertEqual(str(refund.invoice_date), "2026-11-27")
         self.assertEqual(str(refund.vd_period_start), "2026-11-01")
-        self.assertEqual(str(refund.vd_period_end), "2026-11-30")
+        self.assertEqual(str(refund.vd_period_end), "2026-11-27")
         # El período va impreso (art. 4): en la referencia y en las notas.
-        legend = "Período ajustado: 01/11/2026 al 30/11/2026"
+        legend = "Período ajustado: 01/11/2026 al 27/11/2026"
         self.assertIn(legend, refund.ref)
         self.assertIn(legend, str(refund.narration))
         # Las facturas que bonifica quedan identificadas en el origen.
@@ -323,10 +326,26 @@ class TestVolumeDiscount(AccountTestInvoicingCommon):
         refund = self.env["account.move"].browse(self._wizard(inv4).action_apply()["res_id"])
         self.assertFalse(refund.reversed_entry_id)
         self.assertEqual(str(refund.vd_period_start), "2026-11-01")
+        self.assertEqual(str(refund.vd_period_end), "2026-11-28")
         self.assertAlmostEqual(inv1.amount_residual, 2_000_000 - 160_000)
         self.assertAlmostEqual(inv2.amount_residual, 3_000_000 - 240_000)
         self.assertAlmostEqual(inv3.amount_residual, 3_840_000 - 160_000)
         self.assertAlmostEqual(refund.amount_residual, 0)
+
+    def test_later_invoice_outside_period_blocks_refund(self):
+        # La del 20 se confirmó antes; la del 15 cruza el tramo. La NC saldría el 15 y su
+        # período (01–15) no cubriría la del 20: no se emite y no se confirma nada.
+        later = self._invoice(20, 5_000_000)
+        crossing = self._invoice(15, 4_000_000, post=False)
+        wizard = self._wizard(crossing)
+        self.assertIn(later.name, str(wizard.explanation))
+        with self.assertRaisesRegex(UserError, "fecha posterior"):
+            wizard.action_apply()
+        self.assertEqual(crossing.state, "draft")
+        self.assertFalse(self.env["account.move"].search([
+            ("move_type", "=", "out_refund"), ("partner_id", "=", self.partner_a.id),
+        ]))
+        self.assertAlmostEqual(later.amount_residual, 5_000_000)
 
     # ------------------------------------------------- compras del mes en la factura
 
